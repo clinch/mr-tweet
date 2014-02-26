@@ -1,23 +1,18 @@
 
+var config = require('./config.js');
 var Twit = require('twit');
 
-const ROOT_SCREEN_NAME = 'TwitterUsername';
 const MAX_USER_LOOKUPS = 100;	// As defined by the max numbers of users per request. https://dev.twitter.com/docs/api/1.1/get/users/lookup
 const LIST_TOP_NUM = 10;
 
-var twitter = new Twit({
-	consumer_key: 'key',
-	consumer_secret: 'secret',
-	access_token: 'token',
-	access_token_secret: 'secret'
-});
+var twitter = new Twit(config.TWITTER_CREDS);
 
 var allFollowers = new Array();
 var orderedFollowers = new Array();
 
 console.log('calling twitter...');
 
-twitter.get('followers/ids', { screen_name: ROOT_SCREEN_NAME }, function(error, response) {
+twitter.get('followers/ids', { screen_name: config.ROOT_SCREEN_NAME }, function(error, response) {
 	if (error != null) {
 		console.log('ERROR: %s', error);
 	} else {
