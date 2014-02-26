@@ -10,8 +10,4 @@ describe('Array', function(){
   });
 });
 
-describe('MrTweet', function() {
-	describe('#listTopRetweeters', function() {
-		should.have.property('ROOT_SCREEN_NAME');
-	});
-});
+// More testing to come.
