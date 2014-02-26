@@ -1,0 +1,27 @@
+{
+  "name": "mr-tweet",
+  "version": "0.0.1",
+  "description": "Mr. Tweet is a tool to be used for directing tweets to Twitter followers who really matter.",
+  "main": "mr-tweet.js",
+  "directories": {
+    "test": "test"
+  },
+  "scripts": {
+    "test": "mocha"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/clinch/mr-tweet.git"
+  },
+  "keywords": [
+    "twitter",
+    "tweet",
+    "social",
+    "tool"
+  ],
+  "author": "Chris Inch <github@chrisinch.com>",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/clinch/mr-tweet/issues"
+  }
+}
