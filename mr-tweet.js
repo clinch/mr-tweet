@@ -28,7 +28,7 @@ prompt.get({name: 'screenname', required: true, description: 'Twitter username:'
  * Starts the search process on the username provided.
  */
 function beginSearch(screenname) {
-	console.log('calling twitter...');
+	console.log('Beginning follower analysis...');
 
 	twitter.get('followers/ids', { screen_name: screenname }, function(error, response) {
 		if (error != null) {
@@ -57,7 +57,7 @@ function lookupUserFollowers(followingUsers) {
 			if (error != null) {
 				console.log('ERROR: %s', error);
 			} else {
-				console.log("-- %d results", response.length );
+				// console.log("-- %d results", response.length );
 				for (i = 0; i < response.length; i++) {
 					//console.log('@%s has %d followers.', response[i].screen_name, response[i].followers_count);
 					allFollowers.push(response[i]);
@@ -75,8 +75,6 @@ function lookupUserFollowers(followingUsers) {
  * After retrieving all followers, we now parse the list to identify the key players.
  */
 function processFollowers() {
-	console.log("I pity da fool.");
-
 	if (allFollowers != null)  {
 		allFollowers.sort(function (a, b) {
 			return b.followers_count - a.followers_count; 
