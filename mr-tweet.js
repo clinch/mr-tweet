@@ -1,6 +1,7 @@
 
 var config = require('./config.js');
 var Twit = require('twit');
+var prompt = require('prompt');
 
 const MAX_USER_LOOKUPS = 100;	// As defined by the max numbers of users per request. https://dev.twitter.com/docs/api/1.1/get/users/lookup
 const LIST_TOP_NUM = 10;
@@ -10,20 +11,38 @@ var twitter = new Twit(config.TWITTER_CREDS);
 var allFollowers = new Array();
 var orderedFollowers = new Array();
 
-console.log('calling twitter...');
+// Configure and start the command line prompt
+prompt.message = '';
+prompt.delimiter = '';
+prompt.start();
 
-twitter.get('followers/ids', { screen_name: config.ROOT_SCREEN_NAME }, function(error, response) {
-	if (error != null) {
-		console.log('ERROR: %s', error);
-	} else {
-		if (response == null || response.ids == null) {
-			console.log('ERROR: Improper response object');
-		} else {
-			console.log('This user has %d followers.', response.ids.length); 
-			lookupUserFollowers(response.ids);
-		}
+prompt.get({name: 'screenname', required: true, description: 'Twitter username:'},
+	function(err, result) {
+		if (err != null) { console.log(err); return; }
+
+		beginSearch(result.screenname);
 	}
-});
+);
+
+/**
+ * Starts the search process on the username provided.
+ */
+function beginSearch(screenname) {
+	console.log('calling twitter...');
+
+	twitter.get('followers/ids', { screen_name: screenname }, function(error, response) {
+		if (error != null) {
+			console.log('ERROR: %s', error);
+		} else {
+			if (response == null || response.ids == null) {
+				console.log('ERROR: Improper response object');
+			} else {
+				console.log('This user has %d followers.', response.ids.length); 
+				lookupUserFollowers(response.ids);
+			}
+		}
+	});
+}
 
 /**
  * Given a giant array of user_id's, look up individual user info for each one.
