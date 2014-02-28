@@ -1,6 +1,6 @@
 {
   "name": "mr-tweet",
-  "version": "0.0.3",
+  "version": "0.1.0",
   "description": "Mr. Tweet is a tool to be used for directing tweets to Twitter followers who really matter.",
   "main": "mr-tweet.js",
   "directories": {
