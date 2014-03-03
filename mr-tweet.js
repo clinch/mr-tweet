@@ -4,12 +4,13 @@ var Twit = require('twit');
 var prompt = require('prompt');
 
 const MAX_USER_LOOKUPS = 100;	// As defined by the max numbers of users per request. https://dev.twitter.com/docs/api/1.1/get/users/lookup
+const EXAMINE_TOP_NUM = 30;
 const LIST_TOP_NUM = 10;
 
 var twitter = new Twit(config.TWITTER_CREDS);
 
 var allFollowers = new Array();
-var orderedFollowers = new Array();
+var calculatedFollowers = new Array();
 
 // Configure and start the command line prompt
 prompt.message = '';
@@ -80,12 +81,9 @@ function processFollowers() {
 			return b.followers_count - a.followers_count; 
 		});
 		
-		//console.log("User %s has %d followers. The most!", allFollowers[0].screen_name, allFollowers[0].followers_count);
-
 		findBiggestRetweeters();
 	}
 	
-	exportTweeters();
 }
 
 /** 
@@ -93,28 +91,101 @@ function processFollowers() {
  * now go through that list to see which ones will be likely to retweet.
  */
 function findBiggestRetweeters() {
+	var finishedWhen = allFollowers.length < EXAMINE_TOP_NUM ? allFollowers.length : EXAMINE_TOP_NUM;
 
-	var currStatus;
+	for (var i = 0; i < finishedWhen; i ++) {
+		twitter.get('statuses/user_timeline', { user_id: allFollowers[i].id, include_rts: true }, function(error, response) {
+			if (error != null) {
+				console.log('ERROR: %s', error);
+			} else {
+				parseUserTimeline(response);
 
-	for (var i = 0; i < allFollowers.length; i++) {
-		currStatus = allFollowers[i].status;
-	
-		if (currStatus != null && currStatus.retweeted_status != null) {
-			orderedFollowers.push(allFollowers[i]);
-		}
-	
-		if (orderedFollowers.length >= LIST_TOP_NUM) break;
+				// If our list of calculatedFollowers is longer than the finished length, we're done
+				if (calculatedFollowers.length >= finishedWhen) {
+					// We're at the end of the list.
+					exportTweeters();
+				}
+			}
+
+		});
 	}
+
+}
+
+/** 
+ * This function is called to parse through the retrieved timeline and take note
+ * of how likely the user is to retween a tweet from you.
+ */
+function parseUserTimeline(timelineObj) {
+	var timelineUser;
+
+	if (timelineObj != null && timelineObj.length >= 1 && timelineObj[0].user != null) {
+		// Retrieves the user id from the first tweet in the list, so we can match it to array.
+		timelineUser = getUserObj(timelineObj[0].user.id);
+	}
+	if (timelineUser == null) {
+		console.log('ERROR: Problem identifying user. Does Twitter return the originating user for retweets?');
+		return;
+	}
+
+	timelineUser.retweetCount = 0;
+	for (var i = 0; i < timelineObj.length; i++) {
+		if (timelineObj[i].retweeted_status != null) {
+			// The existing of "retweeted_status" is enough to know that this was a retweet.
+			timelineUser.retweetCount++;
+		}
+	}
+
+	timelineUser.retweetPercent = timelineUser.retweetCount / timelineObj.length;
+
+	calculatedFollowers.push(timelineUser);
+
 }
 
 /**
- * Assuming that the array orderedFollowers has now been populated, we simply have to 
+ * Gets a reference to the user object in the list of allFollowers
+ * @param  int userId The user_id we're looking for
+ */
+function getUserObj(userId) {
+	// allFollowers is ordered at this point, so this should be pretty quick
+	for (var i = 0; i < allFollowers.length; i++) {
+		if (allFollowers[i].id == userId) {
+			return allFollowers[i];
+		}
+	}
+
+	console.log("nope");
+	// Uh-oh. Didn't find this user.
+	return null;
+}
+
+/**
+ * Assuming that the array calculatedFollowers has now been populated, we simply have to 
  * export it.
  */
 function exportTweeters() {
-	for (var i = 0; i < orderedFollowers.length; i++) {
-		console.log ("@%s has %d followers and is a retweeter", orderedFollowers[i].screen_name, orderedFollowers[i].followers_count);
-	}
+
+	var screennameList = '';
+
+	if (calculatedFollowers != null)  {
+
+		calculatedFollowers.sort(function (a, b) {
+			return b.retweetPercent - a.retweetPercent; 
+		});
+
+		for (var i = 0; i < calculatedFollowers.length; i++) {
+			console.log ("@%s has %d followers and retweets %d% of the time", 
+				calculatedFollowers[i].screen_name, calculatedFollowers[i].followers_count, calculatedFollowers[i].retweetPercent * 100);
+
+			screennameList += ' @' + calculatedFollowers[i].screen_name;
+
+			if (i >= LIST_TOP_NUM - 1) break;
+		}		
+
+		console.log('\nTweet these people' + screennameList);
+
+	}	
+
 }
 
 
