@@ -17,7 +17,7 @@ prompt.message = '';
 prompt.delimiter = '';
 prompt.start();
 
-prompt.get({name: 'screenname', required: true, description: 'Twitter username:'},
+prompt.get({name: 'screenname', required: true, description: 'Twitter username: @'},
 	function(err, result) {
 		if (err != null) { console.log(err); return; }
 
