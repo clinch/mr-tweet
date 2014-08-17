@@ -2,6 +2,7 @@
 var config = require('./config.js');
 var Twit = require('twit');
 var prompt = require('prompt');
+var async = require('async');
 
 const MAX_USER_LOOKUPS = 100;	// As defined by the max numbers of users per request. https://dev.twitter.com/docs/api/1.1/get/users/lookup
 const EXAMINE_TOP_NUM = 30;
@@ -12,23 +13,66 @@ var twitter = new Twit(config.TWITTER_CREDS);
 var allFollowers = new Array();
 var calculatedFollowers = new Array();
 
+var screenname;
+var hashtags;
+
 // Configure and start the command line prompt
 prompt.message = '';
 prompt.delimiter = '';
 prompt.start();
 
-prompt.get({name: 'screenname', required: true, description: 'Twitter username: @'},
-	function(err, result) {
-		if (err != null) { console.log(err); return; }
+// And... go.
+getUsername();
 
-		beginSearch(result.screenname);
-	}
-);
+/**
+ * Ask the user for the username for which to search.
+ */
+function getUsername() {
+	prompt.get({name: 'screenname', required: true, description: 'Twitter username: @'},
+		function(err, result) {
+			if (err != null) { console.log(err); return; }
+
+			screenname = result.screenname;
+			getHashtags();
+		}
+	);
+}
+
+/**
+ * Asks the user for any required hashtags on followers.
+ */
+function getHashtags() {
+
+	var tagsString;
+
+	prompt.get({name: 'hashtags', description: 'Required hashtags (optional):'},
+		function(err, result) {
+			if (err != null) { console.log(err); return; }
+
+			tagsString = result.hashtags;
+			// Get rid of spaces and commas
+			tagsString = tagsString.replace(/ |,/, '');
+			if (tagsString.length > 1) {
+				hashtags = tagsString.split('#');
+			} else {
+				hashtags = new Array();
+			}
+
+			if (hashtags[0] == '') {
+				hashtags.shift();
+			}
+
+			console.log(hashtags);
+			
+			beginSearch();
+		}
+	);
+}
 
 /**
  * Starts the search process on the username provided.
  */
-function beginSearch(screenname) {
+function beginSearch() {
 	console.log('Beginning follower analysis...');
 
 	twitter.get('followers/ids', { screen_name: screenname }, function(error, response) {
@@ -49,27 +93,37 @@ function beginSearch(screenname) {
  * Given a giant array of user_id's, look up individual user info for each one.
  */
 function lookupUserFollowers(followingUsers) {
-	var callCounter = 0;
 
-	for (i = 0; i < followingUsers.length; i += MAX_USER_LOOKUPS) {
-		callCounter ++;
+	// First split up our array into chunks that will be accepted by twitter.
+	chunks = [];
+	for (var i = 0; i < followingUsers.length; i += MAX_USER_LOOKUPS) {
+		chunks.push(followingUsers.slice(i, i + MAX_USER_LOOKUPS).join(','));
+	}
+	
 
-		twitter.get('users/lookup', { user_id: followingUsers.slice(i, i + MAX_USER_LOOKUPS).join(',') }, function(error, response) {
+	// Use async to iterate through the chunks and retrieve the followers
+	async.map(chunks, function(item, callback) {
+			//console.log('Checking IDs ' + item);
+			twitter.get('users/lookup', { user_id: item }, callback);
+		}, function(error, results) {
 			if (error != null) {
 				console.log('ERROR: %s', error);
 			} else {
-				// console.log("-- %d results", response.length );
-				for (i = 0; i < response.length; i++) {
-					//console.log('@%s has %d followers.', response[i].screen_name, response[i].followers_count);
-					allFollowers.push(response[i]);
+				if (results == null) {
+					console.log('ERROR: Results are not found');
+					return;
 				}
-
-				if (--callCounter == 0) {
-					processFollowers();
+				for (var i = 0; i < results.length; i++) {
+					for (var j = 0; j < results[i].length; j++) {
+						//console.log('@%s has %d followers.', results[i][j].screen_name, results[i][j].followers_count);
+						allFollowers.push(results[i][j]);
+					}
 				}
+				
+				processFollowers();	
 			}
 		});
-	}
+
 }
 
 /**
@@ -94,7 +148,7 @@ function findBiggestRetweeters() {
 	var finishedWhen = allFollowers.length < EXAMINE_TOP_NUM ? allFollowers.length : EXAMINE_TOP_NUM;
 
 	for (var i = 0; i < finishedWhen; i ++) {
-		twitter.get('statuses/user_timeline', { user_id: allFollowers[i].id, include_rts: true }, function(error, response) {
+		twitter.get('statuses/user_timeline', { user_id: allFollowers[i].id, include_rts: true, count: 200  }, function(error, response) {
 			if (error != null) {
 				console.log('ERROR: %s', error);
 			} else {
@@ -129,10 +183,22 @@ function parseUserTimeline(timelineObj) {
 	}
 
 	timelineUser.retweetCount = 0;
+
 	for (var i = 0; i < timelineObj.length; i++) {
 		if (timelineObj[i].retweeted_status != null) {
 			// The existing of "retweeted_status" is enough to know that this was a retweet.
 			timelineUser.retweetCount++;
+		}
+
+		if (hashtags == null || hashtags.length == 0) {
+			// Hashtag matching is optional, so if they're not there, include user.
+			timelineUser.matchedHashtags = true;
+		} else {
+			if (matchHashtags(timelineObj[i]) == true) {
+				timelineUser.matchedHashtags = true;
+			} else {
+				timelineUser.matchedHashtags = false;
+			}			
 		}
 	}
 
@@ -140,6 +206,26 @@ function parseUserTimeline(timelineObj) {
 
 	calculatedFollowers.push(timelineUser);
 
+}
+
+/**
+ * Look for any of the hashtags provided by the user.
+ * @return True if it finds any of the user-supplied hashtags.
+ */
+function matchHashtags(tweet) {
+	if (tweet.entities == null || tweet.entities.hashtags == null) {
+		return false;
+	}
+
+	for (var i = 0; i < tweet.entities.hashtags.length; i++) {
+		for (var j = 0; j < hashtags.length; j++) {
+			if (tweet.entities.hashtags[i].text.toUpperCase() == hashtags[j].toUpperCase()) {
+				return true;
+			}
+		}
+	}
+
+	return false;
 }
 
 /**
@@ -174,6 +260,11 @@ function exportTweeters() {
 		});
 
 		for (var i = 0; i < calculatedFollowers.length; i++) {
+			if (!calculatedFollowers[i].matchedHashtags) {
+				calculatedFollowers.splice(i, 1);
+				i--;
+				continue;
+			}
 			console.log ("@%s has %d followers and retweets %d% of the time", 
 				calculatedFollowers[i].screen_name, calculatedFollowers[i].followers_count, calculatedFollowers[i].retweetPercent * 100);
 
